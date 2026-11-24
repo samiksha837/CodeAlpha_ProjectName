@@ -1,177 +1,192 @@
 
-// Select all gallery images
-const galleryItems = document.querySelectorAll(".gallery-item");
+const current = document.getElementById("current");
+const previous = document.getElementById("previous");
+const buttons = document.querySelector(".buttons");
 
-// Select lightbox elements
-const lightbox = document.getElementById("lightbox");
-const lightboxImg = document.getElementById("lightbox-img");
-const caption = document.getElementById("image-caption");
+let expression = "";
 
-const closeBtn = document.getElementById("close");
-const nextBtn = document.getElementById("next");
-const prevBtn = document.getElementById("prev");
+function formatResult(number) {
+    if (!Number.isFinite(number)) return "Error";
 
-// Filter buttons
-const filterButtons = document.querySelectorAll(".filter-btn");
+    return String(Number(number.toPrecision(12)));
+}
 
-// Store currently visible images
-let visibleImages = [];
-
-// Current image position
-let currentIndex = 0;
-
-
-// Function to open an image
-function openLightbox(index) {
-
-    visibleImages = Array.from(galleryItems).filter(
-        item => !item.classList.contains("hide")
+// Calculate expression with operator precedence
+function calculate(exp) {
+    const tokens = exp.match(
+        /(?:\d+\.?\d*|\.\d+)|[+\-*/]/g
     );
 
-    currentIndex = index;
-
-    showImage();
-
-    lightbox.classList.add("show");
-}
-
-
-// Function to display image
-function showImage() {
-
-    const selectedItem = visibleImages[currentIndex];
-
-    const image = selectedItem.querySelector("img");
-
-    const title = selectedItem.querySelector("h3");
-
-    lightboxImg.src = image.src;
-
-    lightboxImg.alt = image.alt;
-
-    caption.textContent = title.textContent;
-
-}
-
-
-// Open image when clicked
-galleryItems.forEach(item => {
-
-    item.addEventListener("click", () => {
-
-        visibleImages = Array.from(galleryItems).filter(
-            img => !img.classList.contains("hide")
-        );
-
-        const index = visibleImages.indexOf(item);
-
-        openLightbox(index);
-
-    });
-
-});
-
-
-// Next Image
-nextBtn.addEventListener("click", () => {
-
-    currentIndex++;
-
-    if (currentIndex >= visibleImages.length) {
-        currentIndex = 0;
+    if (!tokens || tokens.join("") !== exp) {
+        throw new Error("Invalid expression");
     }
 
-    showImage();
+    let index = 0;
 
-});
+    function factor() {
+        if (tokens[index] === "-") {
+            index++;
+            return -factor();
+        }
 
+        if (tokens[index] === "+") {
+            index++;
+            return factor();
+        }
 
-// Previous Image
-prevBtn.addEventListener("click", () => {
+        const value = Number(tokens[index++]);
 
-    currentIndex--;
+        if (!Number.isFinite(value)) {
+            throw new Error("Invalid number");
+        }
 
-    if (currentIndex < 0) {
-        currentIndex = visibleImages.length - 1;
+        return value;
     }
 
-    showImage();
+    function term() {
+        let result = factor();
 
-});
+        while (tokens[index] === "*" || tokens[index] === "/") {
+            const operator = tokens[index++];
+            const next = factor();
 
-
-// Close Lightbox
-closeBtn.addEventListener("click", () => {
-
-    lightbox.classList.remove("show");
-
-});
-
-
-// Close when clicking outside image
-lightbox.addEventListener("click", (event) => {
-
-    if (event.target === lightbox) {
-        lightbox.classList.remove("show");
-    }
-
-});
-
-
-// Image Filters
-filterButtons.forEach(button => {
-
-    button.addEventListener("click", () => {
-
-        const filter = button.dataset.filter;
-
-        // Remove active class from all buttons
-        filterButtons.forEach(btn => {
-            btn.classList.remove("active");
-        });
-
-        // Activate clicked button
-        button.classList.add("active");
-
-        // Show or hide images
-        galleryItems.forEach(item => {
-
-            const category = item.dataset.category;
-
-            if (filter === "all" || category === filter) {
-
-                item.classList.remove("hide");
-
+            if (operator === "*") {
+                result *= next;
             } else {
-
-                item.classList.add("hide");
-
+                if (next === 0) throw new Error("Cannot divide by zero");
+                result /= next;
             }
+        }
 
-        });
+        return result;
+    }
 
-    });
+    function sum() {
+        let result = term();
 
+        while (tokens[index] === "+" || tokens[index] === "-") {
+            const operator = tokens[index++];
+            const next = term();
+
+            result = operator === "+"
+                ? result + next
+                : result - next;
+        }
+
+        return result;
+    }
+
+    const answer = sum();
+
+    if (index !== tokens.length || !Number.isFinite(answer)) {
+        throw new Error("Invalid expression");
+    }
+
+    return answer;
+}
+
+function updateDisplay() {
+    current.textContent = expression || "0";
+
+    try {
+        if (expression && /[\d.]$/.test(expression)) {
+            const result = calculate(expression);
+            previous.textContent = "= " + formatResult(result);
+        } else {
+            previous.textContent = "";
+        }
+    } catch {
+        previous.textContent = "";
+    }
+}
+
+function addValue(value) {
+    const operators = ["+", "-", "*", "/"];
+    const last = expression.slice(-1);
+
+    if (value === ".") {
+        const lastNumber = expression.split(/[+\-*/]/).pop();
+
+        if (lastNumber.includes(".")) return;
+
+        if (lastNumber === "") {
+            expression += "0";
+        }
+    }
+
+    if (operators.includes(value)) {
+        if (!expression && value !== "-") return;
+
+        if (operators.includes(last)) {
+            expression = expression.slice(0, -1);
+        }
+    }
+
+    expression += value;
+    updateDisplay();
+}
+
+function clearCalculator() {
+    expression = "";
+    updateDisplay();
+}
+
+function deleteLast() {
+    expression = expression.slice(0, -1);
+    updateDisplay();
+}
+
+function showResult() {
+    if (!expression) return;
+
+    try {
+        const answer = calculate(expression);
+        previous.textContent = expression + " =";
+        expression = formatResult(answer);
+        current.textContent = expression;
+    } catch {
+        current.textContent = "Error";
+        previous.textContent = "";
+        expression = "";
+    }
+}
+
+// Button click events
+buttons.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const value = button.dataset.value;
+
+    if (action === "clear") {
+        clearCalculator();
+    } else if (action === "delete") {
+        deleteLast();
+    } else if (action === "calculate") {
+        showResult();
+    } else if (value !== undefined) {
+        addValue(value);
+    }
 });
 
-
-// Keyboard Navigation
+// Keyboard support
 document.addEventListener("keydown", (event) => {
+    const key = event.key;
 
-    if (!lightbox.classList.contains("show")) {
-        return;
+    if (/^[0-9.]$/.test(key)) {
+        addValue(key);
+    } else if (["+", "-", "*", "/"].includes(key)) {
+        addValue(key);
+    } else if (key === "Enter" || key === "=") {
+        event.preventDefault();
+        showResult();
+    } else if (key === "Backspace") {
+        deleteLast();
+    } else if (key === "Escape") {
+        clearCalculator();
     }
-
-    if (event.key === "ArrowRight") {
-        nextBtn.click();
-    }
-
-    if (event.key === "ArrowLeft") {
-        prevBtn.click();
-    }
-
-    if (event.key === "Escape") {
-        lightbox.classList.remove("show");
-    }
-
 });
+
+updateDisplay();
